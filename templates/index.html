@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Hệ Thống Kiểm Tra Lỗi PCBA</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f9; padding: 20px; }
+        .container { display: flex; justify-content: center; gap: 30px; margin-top: 20px; }
+        .card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        img, canvas { border: 1px solid #ccc; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <h2>HỆ THỐNG KIỂM TRA PCBA (EDGE AI - ESP32-S3)</h2>
+    <p>Trạng thái: <b id="status" style="color: green;">Đang chờ dữ liệu...</b></p>
+
+    <div class="container">
+        <!-- Cột 1: Ảnh gốc chưa xử lý -->
+        <div class="card">
+            <h3>1. Ảnh trước xử lý (RAW)</h3>
+            <img id="raw-img" width="400" height="300" src="" alt="Chưa có ảnh" />
+        </div>
+
+        <!-- Cột 2: Ảnh sau xử lý (Lưới đè) -->
+        <div class="card">
+            <h3>2. Ảnh sau xử lý (Edge AI Grid)</h3>
+            <canvas id="processed-canvas" width="400" height="300"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let lastTimestamp = 0;
+
+        function fetchLatestData() {
+            fetch('/get_latest')
+                .then(response => response.json())
+                .then(data => {
+                    // Nếu có dữ liệu mới cập nhật
+                    if (data.timestamp && data.timestamp !== lastTimestamp) {
+                        lastTimestamp = data.timestamp;
+                        document.getElementById('status').innerText = "Đã cập nhật dữ liệu mới!";
+                        
+                        // 1. Cập nhật ảnh gốc
+                        document.getElementById('raw-img').src = data.image_url;
+
+                        // 2. Vẽ ảnh + Lưới lỗi lên Canvas
+                        drawGridOnCanvas(data.image_url, data.matrix);
+                    }
+                });
+        }
+
+        function drawGridOnCanvas(imageUrl, matrix) {
+            const canvas = document.getElementById('processed-canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+
+            img.onload = function() {
+                // Xóa canvas cũ và vẽ ảnh mới
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                if (!matrix || matrix.length === 0) return;
+
+                const rows = matrix.length;
+                const cols = matrix[0].length;
+                const cellW = canvas.width / cols;
+                const cellH = canvas.height / rows;
+
+                // Duyệt mảng matrix để tô màu ô lỗi
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        const x = c * cellW;
+                        const y = r * cellH;
+
+                        // Nếu giá trị != 0 (Ô bị lỗi) -> Tô màu đỏ đè lên
+                        if (matrix[r][c] !== 0) {
+                            ctx.fillStyle = 'rgba(255, 0, 0, 0.45)'; // Màu đỏ trong suốt
+                            ctx.fillRect(x, y, cellW, cellH);
+                        }
+
+                        // Vẽ đường kẻ khung lưới màu trắng
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                        ctx.lineWidth = 1.5;
+                        ctx.strokeRect(x, y, cellW, cellH);
+                    }
+                }
+            };
+            img.src = imageUrl;
+        }
+
+        // Kiểm tra dữ liệu mới mỗi 1 giây (1000ms)
+        setInterval(fetchLatestData, 1000);
+    </script>
+</body>
+</html>
